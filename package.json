@@ -1,0 +1,22 @@
+{
+  "name": "commitblog",
+  "version": "1.0.0",
+  "description": "Turn every git commit into a polished technical blog post",
+  "type": "module",
+  "scripts": {
+    "generate": "tsx generate.ts",
+    "install-hook": "cp post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.42",
+    "@ai-sdk/google": "^3.0.26",
+    "@ai-sdk/openai": "^3.0.27",
+    "ai": "^6.0.81",
+    "dotenv": "^17.2.4",
+    "node-notifier": "^10.0.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

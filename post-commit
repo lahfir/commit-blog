@@ -1,0 +1,18 @@
+#!/bin/sh
+# commitblog — post-commit hook
+# Generates a technical blog post from each commit.
+# Runs in background so it never blocks your workflow.
+
+COMMITBLOG_DIR="$(git rev-parse --show-toplevel)/.commitblog"
+
+# Skip if not set up, during rebase, or if COMMITBLOG_SKIP is set
+[ ! -f "$COMMITBLOG_DIR/generate.ts" ] && exit 0
+[ -d "$(git rev-parse --git-dir)/rebase-merge" ] && exit 0
+[ -d "$(git rev-parse --git-dir)/rebase-apply" ] && exit 0
+[ -n "$COMMITBLOG_SKIP" ] && exit 0
+
+# Run in background so commits stay fast
+cd "$(git rev-parse --show-toplevel)"
+npx tsx "$COMMITBLOG_DIR/generate.ts" &
+
+exit 0
