@@ -1,77 +1,126 @@
 # commitblog
 
-Turn every git commit into a technical blog post. Stripe/Vercel/Netflix quality, zero effort.
+Generate a technical blog post automatically after every git commit.
+
+`commitblog` reads your latest commit message and diff, asks an LLM to write a post, and saves a markdown draft to your chosen output directory.
+
+## Why this exists
+
+Most engineering teams want to publish more technical writing, but writing always loses to shipping.  
+This project turns the work you already did (your commit) into a first-pass post you can quickly polish and publish.
 
 ## How it works
 
-```
-git commit → post-commit hook → reads diff + message → LLM → blogs/2025-02-10-your-slug.md
+```text
+git commit
+  -> .git/hooks/post-commit
+  -> run .commitblog/generate.ts
+  -> read commit metadata + diff
+  -> generate post with Vercel AI SDK
+  -> save markdown file in blogs/
 ```
 
-That's it. One file (`generate.ts`), one git hook, one config.
+## Features
 
-## Install
+- Uses real commit context (message, author, diff stats, files changed)
+- Supports multiple providers via model string (`anthropic/*`, `openai/*`, `google/*`, `groq/*`, `openrouter/*`)
+- Skips noisy commits with configurable patterns
+- Writes generation progress to `.commitblog/last-run.log`
+- Sends desktop notifications for success/failure
+
+## Quick start
+
+### 1) Clone and install this tool into a repo
 
 ```bash
-# In your repo
 git clone https://github.com/yourname/commitblog /tmp/commitblog
+cd /path/to/your-project
 bash /tmp/commitblog/install.sh
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-## Switch providers
+### 2) Add API keys in your project root `.env`
 
-Edit `.commitblog.json`:
+```bash
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+GOOGLE_GENERATIVE_AI_API_KEY=...
+GROQ_API_KEY=...
+OPENROUTER_API_KEY=...
+```
+
+You only need the key for the provider used by your selected model.
+
+### 3) Commit as normal
+
+```bash
+git add .
+git commit -m "Refactor auth middleware"
+```
+
+`commitblog` runs after commit and writes a post file like:
+
+```text
+blogs/2026-02-11-refactor-auth-middleware.md
+```
+
+## Configuration
+
+Create `.commitblog.json` in your project root:
 
 ```json
-{ "model": "anthropic/claude-sonnet-4-20250514" }
-{ "model": "openai/gpt-4o" }
-{ "model": "google/gemini-2.0-flash" }
+{
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "outputDir": "blogs",
+  "skipPatterns": ["^Merge ", "^WIP", "^fixup!", "^chore:"]
+}
 ```
 
-Uses the [Vercel AI SDK](https://ai-sdk.dev) — any supported provider works.
+| Field          | Default                                     | Description                          |
+| -------------- | ------------------------------------------- | ------------------------------------ |
+| `model`        | `anthropic/claude-sonnet-4-20250514`        | Vercel AI SDK model ID               |
+| `outputDir`    | `blogs`                                     | Output directory for generated posts |
+| `skipPatterns` | `["^Merge ", "^WIP", "^fixup!", "^chore:"]` | Regex patterns that skip generation  |
 
-## Skip a commit
+## Usage tips
+
+- Skip one commit manually:
+
+  ```bash
+  COMMITBLOG_SKIP=1 git commit -m "wip"
+  ```
+
+- Retry after fixing an issue: the script prompts for `r` to re-run.
+- Generated markdown is a draft; review/edit before publishing.
+
+## Repository structure
+
+```text
+commitblog/
+├── generate.ts       # Main generator script
+├── post-commit       # Git hook template
+├── install.sh        # Installer for target repositories
+├── package.json      # Runtime metadata and scripts
+├── CONTRIBUTING.md   # Contribution guide
+└── README.md         # Project documentation
+```
+
+## Development
 
 ```bash
-COMMITBLOG_SKIP=1 git commit -m "wip stuff"
+npm install
+npm run generate
 ```
 
-Merge commits, WIP, fixup, and chore commits are skipped automatically.
+Install the hook in this repo for local testing:
 
-## What you get
-
-A markdown file in `blogs/` with:
-
-- YAML frontmatter (title, date, author, tags, description)
-- Real code from your diff, not pseudocode
-- Mermaid diagrams when architecture changes warrant them
-- SEO-optimized title and tags derived from actual technologies in the diff
-- Written in first person, engineer-to-engineer tone — no AI slop
-
-## Config
-
-`.commitblog.json` at your repo root:
-
-| Field          | Default                              | Description                    |
-| -------------- | ------------------------------------ | ------------------------------ |
-| `model`        | `anthropic/claude-sonnet-4-20250514` | Any Vercel AI SDK model string |
-| `outputDir`    | `blogs`                              | Where posts are saved          |
-| `skipPatterns` | `["^Merge ", "^WIP", ...]`           | Regex patterns to skip commits |
-
-## Project structure
-
+```bash
+npm run install-hook
 ```
-your-repo/
-├── .commitblog/
-│   ├── generate.ts          # The generator (only file that matters)
-│   ├── package.json         # AI SDK dependencies
-│   └── node_modules/
-├── .commitblog.json         # Your config
-├── .git/hooks/post-commit   # Triggers generate.ts
-└── blogs/                   # Output
-    ├── 2025-02-10-add-jwt-auth.md
-    └── 2025-02-11-fix-rate-limiting.md
-```
+
+## Contributing
+
+See `CONTRIBUTING.md` for workflow and standards.
+
+## License
+
+MIT — see `LICENSE`.

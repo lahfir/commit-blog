@@ -1,104 +1,92 @@
-#!/bin/bash
-# Install commitblog into the current git repo
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-if [ -z "$REPO_ROOT" ]; then
-  echo "Error: not inside a git repo."
+# Installs commitblog into the current git repository.
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is required."
   exit 1
 fi
 
-echo ""
-echo "  commitblog installer"
-echo "  ────────────────────"
-echo ""
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is required."
+  exit 1
+fi
 
-# Create .commitblog directory
-mkdir -p "$REPO_ROOT/.commitblog"
-mkdir -p "$REPO_ROOT/blogs"
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Error: run this inside a git repository."
+  exit 1
+fi
 
-# Copy generate.ts (or download it)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ -f "$SCRIPT_DIR/generate.ts" ]; then
-  cp "$SCRIPT_DIR/generate.ts" "$REPO_ROOT/.commitblog/generate.ts"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+COMMITBLOG_DIR="$REPO_ROOT/.commitblog"
+HOOKS_DIR="$REPO_ROOT/.git/hooks"
+
+mkdir -p "$COMMITBLOG_DIR"
+
+cp "$SCRIPT_DIR/generate.ts" "$COMMITBLOG_DIR/generate.ts"
+cp "$SCRIPT_DIR/package.json" "$COMMITBLOG_DIR/package.json"
+HOOK_FILE="$HOOKS_DIR/post-commit"
+
+if [ -f "$HOOK_FILE" ]; then
+  if ! grep -Fq ".commitblog/generate.ts" "$HOOK_FILE"; then
+    cat >>"$HOOK_FILE" <<'EOF'
+
+# commitblog
+CB_DIR="$(git rev-parse --show-toplevel)/.commitblog"
+if [ -f "$CB_DIR/generate.ts" ] \
+  && [ -z "$COMMITBLOG_SKIP" ] \
+  && [ ! -d "$(git rev-parse --git-dir)/rebase-merge" ] \
+  && [ ! -d "$(git rev-parse --git-dir)/rebase-apply" ]; then
+  cd "$(git rev-parse --show-toplevel)"
+  npx tsx "$CB_DIR/generate.ts" &
+fi
+EOF
+  fi
 else
-  echo "Error: generate.ts not found. Place this script next to generate.ts."
-  exit 1
+  cp "$SCRIPT_DIR/post-commit" "$HOOK_FILE"
 fi
 
-# Create default config
+chmod +x "$HOOK_FILE"
+
 if [ ! -f "$REPO_ROOT/.commitblog.json" ]; then
-  cat > "$REPO_ROOT/.commitblog.json" << 'EOF'
+  cat >"$REPO_ROOT/.commitblog.json" <<'EOF'
 {
   "model": "anthropic/claude-sonnet-4-20250514",
   "outputDir": "blogs",
   "skipPatterns": ["^Merge ", "^WIP", "^fixup!", "^chore:"]
 }
 EOF
-  echo "  Created .commitblog.json"
 fi
 
-# Install package.json deps in .commitblog
-cat > "$REPO_ROOT/.commitblog/package.json" << 'EOF'
-{
-  "name": "commitblog-local",
-  "type": "module",
-  "dependencies": {
-    "ai": "^4.3.0",
-    "@ai-sdk/anthropic": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0",
-    "@ai-sdk/google": "^1.0.0"
-  }
-}
+(
+  cd "$COMMITBLOG_DIR"
+  npm install
+)
+
+if [ ! -f "$REPO_ROOT/.env" ]; then
+  cat >"$REPO_ROOT/.env" <<'EOF'
+# Add the key for the provider used by your selected model.
+ANTHROPIC_API_KEY=
+# OPENAI_API_KEY=
+# GOOGLE_GENERATIVE_AI_API_KEY=
+# GROQ_API_KEY=
+# OPENROUTER_API_KEY=
 EOF
+fi
 
-echo "  Installing dependencies..."
-cd "$REPO_ROOT/.commitblog" && npm install --silent 2>/dev/null
-cd "$REPO_ROOT"
+GITIGNORE_FILE="$REPO_ROOT/.gitignore"
+[ -f "$GITIGNORE_FILE" ] || touch "$GITIGNORE_FILE"
 
-# Install git hook
-mkdir -p "$REPO_ROOT/.git/hooks"
-HOOK_FILE="$REPO_ROOT/.git/hooks/post-commit"
-
-if [ -f "$HOOK_FILE" ]; then
-  if grep -q "commitblog" "$HOOK_FILE"; then
-    echo "  Git hook already installed."
-  else
-    echo "" >> "$HOOK_FILE"
-    echo "# commitblog" >> "$HOOK_FILE"
-    echo 'npx tsx "$(git rev-parse --show-toplevel)/.commitblog/generate.ts" &' >> "$HOOK_FILE"
-    echo "  Appended to existing post-commit hook."
+for entry in "blogs/" ".commitblog.json"; do
+  if ! grep -Fxq "$entry" "$GITIGNORE_FILE"; then
+    printf "%s\n" "$entry" >>"$GITIGNORE_FILE"
   fi
-else
-  cat > "$HOOK_FILE" << 'HOOK'
-#!/bin/sh
-CB_DIR="$(git rev-parse --show-toplevel)/.commitblog"
-[ ! -f "$CB_DIR/generate.ts" ] && exit 0
-[ -d "$(git rev-parse --git-dir)/rebase-merge" ] && exit 0
-[ -n "$COMMITBLOG_SKIP" ] && exit 0
-cd "$(git rev-parse --show-toplevel)"
-npx tsx "$CB_DIR/generate.ts" &
-exit 0
-HOOK
-  chmod +x "$HOOK_FILE"
-  echo "  Installed post-commit hook."
-fi
+done
 
-# Add to .gitignore
-if ! grep -q ".commitblog/node_modules" "$REPO_ROOT/.gitignore" 2>/dev/null; then
-  echo ".commitblog/node_modules" >> "$REPO_ROOT/.gitignore"
-fi
-
-echo ""
-echo "  Done. Set your API key:"
-echo ""
-echo "    export ANTHROPIC_API_KEY=sk-..."
-echo ""
-echo "  Or switch providers in .commitblog.json:"
-echo ""
-echo '    { "model": "openai/gpt-4o" }'
-echo '    { "model": "google/gemini-2.0-flash" }'
-echo '    { "model": "anthropic/claude-sonnet-4-20250514" }'
-echo ""
-echo "  Skip a commit:  COMMITBLOG_SKIP=1 git commit -m '...'"
-echo ""
+echo "commitblog installed."
+echo "- Hook: .git/hooks/post-commit"
+echo "- Script: .commitblog/generate.ts"
+echo "- Config: .commitblog.json"
+echo "- Environment: .env"

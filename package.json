@@ -1,12 +1,24 @@
 {
   "name": "commitblog",
   "version": "1.0.0",
-  "description": "Turn every git commit into a polished technical blog post",
+  "description": "Generate technical blog post drafts from git commits",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "generate": "tsx generate.ts",
-    "install-hook": "cp post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit"
+    "install-hook": "cp post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit",
+    "setup": "bash install.sh"
   },
+  "keywords": [
+    "git",
+    "blog",
+    "llm",
+    "automation",
+    "developer-tools"
+  ],
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.42",
     "@ai-sdk/google": "^3.0.26",
